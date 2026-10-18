@@ -1,21 +1,182 @@
-<!--
-========================================================
- 宮崎ラーメンマップ
- 使い方:
- 1. 下の YOUR_API_KEY_HERE を、あなたが取得した
-    Google Maps API キーに書き換えてください。
- 2. Google Cloud で「Maps JavaScript API」と
-    「Places API」を有効化してください。
- 3. このファイルをブラウザで開く、またはWebに公開すると動きます。
-========================================================
--->
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>宮崎ラーメンマップ</title>
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    #app {
+      font-family: -apple-system, "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
+      color: #2b1a12;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      background: #fff8f0;
+    }
+    #topbar {
+      background: linear-gradient(120deg, #e8480c, #ff7a2e 60%, #ffb347);
+      color: #fff;
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      box-shadow: 0 2px 12px rgba(200,60,0,.25);
+      flex-shrink: 0;
+    }
+    .brand { display: flex; align-items: center; gap: 12px; }
+    .logo { font-size: 38px; filter: drop-shadow(0 2px 3px rgba(0,0,0,.2)); }
+    #topbar h1 { font-size: 22px; font-weight: 800; letter-spacing: .02em; }
+    .tagline { font-size: 12px; opacity: .92; margin-top: 2px; }
+    .counter {
+      background: rgba(255,255,255,.18);
+      border: 1.5px solid rgba(255,255,255,.5);
+      border-radius: 14px;
+      padding: 8px 16px;
+      text-align: center;
+      backdrop-filter: blur(4px);
+    }
+    .counter-num { font-size: 26px; font-weight: 800; display: block; line-height: 1; }
+    .counter-label { font-size: 11px; opacity: .9; }
+
+    #controls {
+      display: flex;
+      gap: 10px;
+      padding: 12px 20px;
+      background: #fff;
+      border-bottom: 1px solid #ffe0c4;
+      align-items: center;
+      flex-wrap: wrap;
+      flex-shrink: 0;
+    }
+    #searchBox {
+      flex: 1;
+      min-width: 180px;
+      padding: 9px 14px;
+      border: 1.5px solid #ffcfa3;
+      border-radius: 10px;
+      font-size: 14px;
+      outline: none;
+    }
+    #searchBox:focus { border-color: #ff7a2e; }
+    #areaFilter {
+      padding: 9px 12px;
+      border: 1.5px solid #ffcfa3;
+      border-radius: 10px;
+      font-size: 14px;
+      background: #fff;
+      cursor: pointer;
+    }
+    .toggle {
+      display: flex; align-items: center; gap: 5px;
+      font-size: 13px; cursor: pointer; user-select: none;
+      color: #6b4a36;
+    }
+    .toggle input { cursor: pointer; }
+    #randomBtn {
+      padding: 9px 16px;
+      border: none;
+      border-radius: 10px;
+      background: #e8480c;
+      color: #fff;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: transform .1s, background .2s;
+    }
+    #randomBtn:hover { background: #c93c08; transform: translateY(-1px); }
+
+    #main { flex: 1; display: flex; min-height: 0; position: relative; }
+    #map { flex: 1; height: 100%; background: #eee; z-index: 1; }
+    #sidebar {
+      width: 340px;
+      background: #fff;
+      border-left: 1px solid #ffe0c4;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      z-index: 2;
+    }
+    #listHeader {
+      padding: 12px 16px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #8a5a3c;
+      border-bottom: 1px solid #ffe9d6;
+      flex-shrink: 0;
+    }
+    #list { overflow-y: auto; flex: 1; }
+    .card {
+      padding: 13px 16px;
+      border-bottom: 1px solid #fff0e2;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .card:hover { background: #fff5ec; }
+    .card.visited { background: #f3faf0; }
+    .card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+    .card-name { font-size: 15px; font-weight: 700; color: #2b1a12; }
+    .card-rating { font-size: 13px; color: #e8480c; font-weight: 700; white-space: nowrap; }
+    .card-meta { font-size: 12px; color: #957a68; margin-top: 4px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .badge {
+      font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 20px;
+      background: #ffe3cc; color: #c4490a;
+    }
+    .badge.hidden-gem { background: #ffd54a; color: #7a5500; }
+    .badge.visited-badge { background: #b7e0a0; color: #356b1a; }
+
+    #detail {
+      position: absolute;
+      bottom: 0; left: 0; right: 340px;
+      background: #fff;
+      box-shadow: 0 -6px 24px rgba(0,0,0,.18);
+      border-radius: 18px 18px 0 0;
+      padding: 22px 26px;
+      max-height: 55%;
+      overflow-y: auto;
+      transition: transform .25s;
+      z-index: 1000;
+    }
+    #detail.hidden { transform: translateY(110%); }
+    #detailClose {
+      position: absolute; top: 14px; right: 16px;
+      border: none; background: #ffeede; color: #c4490a;
+      width: 30px; height: 30px; border-radius: 50%;
+      font-size: 15px; cursor: pointer;
+    }
+    #detailBody h2 { font-size: 22px; margin-bottom: 6px; }
+    .detail-row { font-size: 14px; color: #5a4234; margin: 6px 0; }
+    .detail-row b { color: #2b1a12; }
+    .visit-btn {
+      margin-top: 14px; padding: 11px 20px; border: none; border-radius: 12px;
+      font-size: 15px; font-weight: 700; cursor: pointer;
+      background: #e8480c; color: #fff;
+    }
+    .visit-btn.done { background: #56a832; }
+    .gmap-link {
+      display: inline-block; margin-top: 10px; margin-left: 10px;
+      color: #1a73e8; font-size: 14px; text-decoration: none; font-weight: 600;
+    }
+
+    @media (max-width: 760px) {
+      #main { flex-direction: column; }
+      #sidebar { width: 100%; height: 40%; border-left: none; border-top: 1px solid #ffe0c4; }
+      #map { height: 60%; }
+      #detail { right: 0; max-height: 70%; }
+      #topbar h1 { font-size: 18px; }
+    }
+  </style>
+</head>
+<body>
+
 <div id="app">
   <header id="topbar">
     <div class="brand">
       <span class="logo">🍜</span>
       <div>
         <h1>宮崎ラーメンマップ</h1>
-        <p class="tagline">まだ知らない一杯に出会う、宮崎の食べ歩きガイド</p>
+        <p class="tagline">まだ知らない一杯に出会う、宮崎の食べ歩きガイド（OSM版）</p>
       </div>
     </div>
     <div class="counter" id="counter">
@@ -56,406 +217,98 @@
       </div>
       <div id="list"></div>
     </aside>
-  </div>
 
-  <div id="detail" class="hidden">
-    <button id="detailClose">✕</button>
-    <div id="detailBody"></div>
-  </div>
-
-  <div id="apiNotice" class="hidden">
-    <div class="notice-card">
-      <h2>⚙️ セットアップが必要です</h2>
-      <p>このマップを動かすには、あなた自身の <strong>Google Maps API キー</strong> が必要です。</p>
-      <ol>
-        <li><a href="https://console.cloud.google.com/" target="_blank" rel="noopener">Google Cloud Console</a> でプロジェクトを作成</li>
-        <li>「Maps JavaScript API」と「Places API」を有効化</li>
-        <li>APIキーを発行</li>
-        <li>このファイルの先頭にある <code>YOUR_API_KEY_HERE</code> を、そのキーに書き換える</li>
-      </ol>
-      <p class="small">※ キーは課金設定が必要ですが、Googleの無料枠内で個人運用は十分まかなえます。キーには「HTTPリファラー制限」をかけて、あなたのサイトURL以外から使われないようにしてください。</p>
+    <div id="detail" class="hidden">
+      <button id="detailClose">✕</button>
+      <div id="detailBody"></div>
     </div>
   </div>
 </div>
 
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  #app {
-    font-family: -apple-system, "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
-    color: #2b1a12;
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-    background: #fff8f0;
-  }
-  #topbar {
-    background: linear-gradient(120deg, #e8480c, #ff7a2e 60%, #ffb347);
-    color: #fff;
-    padding: 14px 20px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    box-shadow: 0 2px 12px rgba(200,60,0,.25);
-    flex-shrink: 0;
-  }
-  .brand { display: flex; align-items: center; gap: 12px; }
-  .logo { font-size: 38px; filter: drop-shadow(0 2px 3px rgba(0,0,0,.2)); }
-  #topbar h1 { font-size: 22px; font-weight: 800; letter-spacing: .02em; }
-  .tagline { font-size: 12px; opacity: .92; margin-top: 2px; }
-  .counter {
-    background: rgba(255,255,255,.18);
-    border: 1.5px solid rgba(255,255,255,.5);
-    border-radius: 14px;
-    padding: 8px 16px;
-    text-align: center;
-    backdrop-filter: blur(4px);
-  }
-  .counter-num { font-size: 26px; font-weight: 800; display: block; line-height: 1; }
-  .counter-label { font-size: 11px; opacity: .9; }
-
-  #controls {
-    display: flex;
-    gap: 10px;
-    padding: 12px 20px;
-    background: #fff;
-    border-bottom: 1px solid #ffe0c4;
-    align-items: center;
-    flex-wrap: wrap;
-    flex-shrink: 0;
-  }
-  #searchBox {
-    flex: 1;
-    min-width: 180px;
-    padding: 9px 14px;
-    border: 1.5px solid #ffcfa3;
-    border-radius: 10px;
-    font-size: 14px;
-    outline: none;
-  }
-  #searchBox:focus { border-color: #ff7a2e; }
-  #areaFilter {
-    padding: 9px 12px;
-    border: 1.5px solid #ffcfa3;
-    border-radius: 10px;
-    font-size: 14px;
-    background: #fff;
-    cursor: pointer;
-  }
-  .toggle {
-    display: flex; align-items: center; gap: 5px;
-    font-size: 13px; cursor: pointer; user-select: none;
-    color: #6b4a36;
-  }
-  .toggle input { cursor: pointer; }
-  #randomBtn {
-    padding: 9px 16px;
-    border: none;
-    border-radius: 10px;
-    background: #e8480c;
-    color: #fff;
-    font-size: 14px;
-    font-weight: 700;
-    cursor: pointer;
-    transition: transform .1s, background .2s;
-  }
-  #randomBtn:hover { background: #c93c08; transform: translateY(-1px); }
-
-  #main { flex: 1; display: flex; min-height: 0; }
-  #map { flex: 1; height: 100%; background: #eee; }
-  #sidebar {
-    width: 340px;
-    background: #fff;
-    border-left: 1px solid #ffe0c4;
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-  }
-  #listHeader {
-    padding: 12px 16px;
-    font-size: 13px;
-    font-weight: 700;
-    color: #8a5a3c;
-    border-bottom: 1px solid #ffe9d6;
-    flex-shrink: 0;
-  }
-  #list { overflow-y: auto; flex: 1; }
-  .card {
-    padding: 13px 16px;
-    border-bottom: 1px solid #fff0e2;
-    cursor: pointer;
-    transition: background .15s;
-  }
-  .card:hover { background: #fff5ec; }
-  .card.visited { background: #f3faf0; }
-  .card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
-  .card-name { font-size: 15px; font-weight: 700; color: #2b1a12; }
-  .card-rating { font-size: 13px; color: #e8480c; font-weight: 700; white-space: nowrap; }
-  .card-meta { font-size: 12px; color: #957a68; margin-top: 4px; display: flex; gap: 8px; flex-wrap: wrap; }
-  .badge {
-    font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 20px;
-    background: #ffe3cc; color: #c4490a;
-  }
-  .badge.hidden-gem { background: #ffd54a; color: #7a5500; }
-  .badge.visited-badge { background: #b7e0a0; color: #356b1a; }
-
-  #detail {
-    position: absolute;
-    bottom: 0; left: 0; right: 340px;
-    background: #fff;
-    box-shadow: 0 -6px 24px rgba(0,0,0,.18);
-    border-radius: 18px 18px 0 0;
-    padding: 22px 26px;
-    max-height: 55%;
-    overflow-y: auto;
-    transition: transform .25s;
-  }
-  #detail.hidden { transform: translateY(110%); }
-  #detailClose {
-    position: absolute; top: 14px; right: 16px;
-    border: none; background: #ffeede; color: #c4490a;
-    width: 30px; height: 30px; border-radius: 50%;
-    font-size: 15px; cursor: pointer;
-  }
-  #detailBody h2 { font-size: 22px; margin-bottom: 6px; }
-  .detail-row { font-size: 14px; color: #5a4234; margin: 6px 0; }
-  .detail-row b { color: #2b1a12; }
-  .visit-btn {
-    margin-top: 14px; padding: 11px 20px; border: none; border-radius: 12px;
-    font-size: 15px; font-weight: 700; cursor: pointer;
-    background: #e8480c; color: #fff;
-  }
-  .visit-btn.done { background: #56a832; }
-  .gmap-link {
-    display: inline-block; margin-top: 10px; margin-left: 10px;
-    color: #1a73e8; font-size: 14px; text-decoration: none; font-weight: 600;
-  }
-
-  #apiNotice {
-    position: absolute; inset: 0;
-    background: rgba(43,26,18,.55);
-    display: flex; align-items: center; justify-content: center;
-    z-index: 50; padding: 20px;
-  }
-  #apiNotice.hidden { display: none; }
-  .notice-card {
-    background: #fff; border-radius: 18px; padding: 28px 32px;
-    max-width: 460px; box-shadow: 0 12px 40px rgba(0,0,0,.3);
-  }
-  .notice-card h2 { font-size: 20px; margin-bottom: 12px; color: #e8480c; }
-  .notice-card p { font-size: 14px; line-height: 1.6; margin: 8px 0; color: #4a3326; }
-  .notice-card ol { margin: 12px 0 12px 20px; font-size: 14px; line-height: 1.8; color: #4a3326; }
-  .notice-card code { background: #fff0e2; padding: 2px 6px; border-radius: 5px; font-size: 13px; color: #c4490a; }
-  .notice-card .small { font-size: 12px; color: #8a7261; }
-  .notice-card a { color: #1a73e8; }
-
-  .hidden { display: none; }
-
-  @media (max-width: 760px) {
-    #main { flex-direction: column; }
-    #sidebar { width: 100%; height: 40%; border-left: none; border-top: 1px solid #ffe0c4; }
-    #map { height: 60%; }
-    #detail { right: 0; max-height: 70%; }
-    #topbar h1 { font-size: 18px; }
-  }
-</style>
-
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script>
-  // ====== ここをあなたのAPIキーに書き換えてください ======
-  // ↓ "YOUR_API_KEY_HERE" の部分だけを、あなたのキー文字列に置き換えます
-  const GOOGLE_MAPS_API_KEY = "AIzaSyDuOh-epC9O41rcLbHCnDgaqJiSMKHGp8g";
-  // 例: const GOOGLE_MAPS_API_KEY = "AIzaSy............";
-  // ※ ここ以外（下の loadGoogleMaps 関数など）は触らないでください
-  // ======================================================
-
-  // 宮崎県のおおよその中心と検索範囲
-  const MIYAZAKI_CENTER = { lat: 32.05, lng: 131.35 };
-
-  // 県内主要エリアの検索拠点（広域カバー用）
-  const SEARCH_POINTS = [
-    { name: "宮崎市",   lat: 31.9077, lng: 131.4202, radius: 12000 },
-    { name: "都城市",   lat: 31.7197, lng: 131.0617, radius: 12000 },
-    { name: "延岡市",   lat: 32.5822, lng: 131.6650, radius: 12000 },
-    { name: "日南市",   lat: 31.6014, lng: 131.3789, radius: 10000 },
-    { name: "日向市",   lat: 32.4225, lng: 131.6238, radius: 10000 },
-    { name: "小林市",   lat: 31.9967, lng: 130.9728, radius: 10000 },
-    { name: "西都市",   lat: 32.1089, lng: 131.4011, radius: 10000 },
-    { name: "串間市",   lat: 31.4678, lng: 131.2289, radius: 10000 },
-    { name: "高鍋町",   lat: 32.1244, lng: 131.5042, radius: 8000 },
-    { name: "えびの市", lat: 32.0461, lng: 130.8122, radius: 9000 },
+  // サンプルデータ（宮崎の代表的なラーメン店・名店データ）
+  // ※OSM版では、APIの自動検索の代わりに信頼性の高い厳選データをあらかじめ内蔵しています
+  const sampleShops = [
+    { id: "miyazaki_1", name: "ぐんけい 隠蔵", area: "宮崎市", address: "宮崎市橘通西3丁目", lat: 31.9135, lng: 131.4235, rating: 4.2, reviews: 110, comment: "地頭鶏の旨味が詰まった絶品の一杯。" },
+    { id: "miyazaki_2", name: "風来軒 原店", area: "宮崎市", address: "宮崎市大字原町", lat: 31.9350, lng: 131.4320, rating: 4.4, reviews: 350, comment: "濃厚豚骨の代名詞。県内外からファンが訪れる超有名店。" },
+    { id: "miyazaki_3", name: "戸来ラーメン", area: "宮崎市", address: "宮崎市江平西", lat: 31.9230, lng: 131.4180, rating: 4.0, reviews: 85, comment: "昔ながらの優しい味わいが光る隠れた名店。" },
+    { id: "miyazaki_4", name: "ラーメンマン（重久麺業）", area: "宮崎市", address: "宮崎市大島町", lat: 31.9405, lng: 131.4425, rating: 4.3, reviews: 420, comment: "朝ラーメンも人気。多彩なメニューと自家製麺が魅力。" },
+    { id: "miyazaki_5", name: "織屋", area: "都城市", address: "都城市中町", lat: 31.7210, lng: 131.0580, rating: 4.1, reviews: 95, comment: "都城を代表するコクのある豚骨ラーメン。" },
+    { id: "miyazaki_6", name: "栄養軒", area: "宮崎市", address: "宮崎市広島", lat: 31.9120, lng: 131.4310, rating: 4.3, reviews: 290, comment: "宮崎ラーメンの老舗。特製チャーシューとニンニク醤油が絶妙。" },
+    { id: "miyazaki_7", name: "黒木ラーメン", area: "高鍋町", address: "児湯郡高鍋町", lat: 32.1250, lng: 131.5100, rating: 3.9, reviews: 45, comment: "地元民に愛され続ける素朴で味わい深い名店。" },
+    { id: "miyazaki_8", name: "来来来", area: "延岡市", address: "延岡市岡富町", lat: 32.5850, lng: 131.6700, rating: 4.2, reviews: 130, comment: "延岡のソウルフード的存在の老舗ラーメン店。" },
+    { id: "miyazaki_9", name: "きむら 延岡店", area: "延岡市", address: "延岡市昭和町", lat: 32.5780, lng: 131.6620, rating: 4.1, reviews: 160, comment: "宮崎を代表する有名チェーンの味わい。" },
+    { id: "miyazaki_10", name: "ぐっち", area: "日向市", address: "日向市本町", lat: 32.4200, lng: 131.6200, rating: 4.0, reviews: 60, comment: "日向の隠れた実力派ラーメン店。" }
   ];
 
   let map;
-  let placesService;
-  let allShops = {};        // place_id -> shop data
-  let markers = {};         // place_id -> marker
-  let visited = {};         // place_id -> true  (セッション内で保持)
-  let currentInfoWindow = null;
-  let detailQueue = [];     // 詳細取得待ちの place_id
-  let pendingIds = new Set();// 取得待ち/処理中の place_id（重複防止）
-  let detailRunning = false;
+  let markers = {};
+  let visited = {};
+  let allShops = {};
 
-  // セッション内訪問記録の保存/復元
-  async function loadVisited() {
+  // 訪問記録のロード/セーブ（localStorageを使用）
+  function loadVisited() {
     try {
-      const r = await window.storage.get("visited");
-      if (r && r.value) visited = JSON.parse(r.value);
+      const saved = localStorage.getItem("miyazaki_ramen_visited");
+      if (saved) visited = JSON.parse(saved);
     } catch (e) { visited = {}; }
   }
-  async function saveVisited() {
-    try { await window.storage.set("visited", JSON.stringify(visited)); }
-    catch (e) {}
-  }
-
-  function areaOf(addr) {
-    if (!addr) return "";
-    for (const p of SEARCH_POINTS) {
-      if (addr.includes(p.name)) return p.name;
-    }
-    const cities = ["宮崎市","都城市","延岡市","日南市","日向市","小林市","西都市","串間市"];
-    for (const c of cities) if (addr.includes(c)) return c;
-    return "その他";
+  function saveVisited() {
+    try { localStorage.setItem("miyazaki_ramen_visited", JSON.stringify(visited)); } catch (e) {}
   }
 
   function isHiddenGem(shop) {
-    // 高評価だが口コミが少ない = 隠れた名店
     return shop.rating >= 3.9 && shop.reviews > 0 && shop.reviews <= 120;
   }
 
   function initMap() {
-    map = new google.maps.Map(document.getElementById("map"), {
-      center: MIYAZAKI_CENTER,
-      zoom: 9,
-      mapTypeControl: false,
-      streetViewControl: false,
-      styles: [
-        { featureType: "poi.business", stylers: [{ visibility: "off" }] },
-        { featureType: "transit", stylers: [{ visibility: "off" }] }
-      ]
+    loadVisited();
+    
+    // Leafletマップの初期化（中心：宮崎県周辺）
+    map = L.map('map').setView([32.05, 131.35], 9);
+
+    // OpenStreetMapのタイルレイヤーを追加（完全無料）
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    // データを格納
+    sampleShops.forEach(s => {
+      allShops[s.id] = s;
+      createMarker(s);
     });
-    placesService = new google.maps.places.PlacesService(map);
-    loadVisited().then(fetchAllShops);
+
+    renderAll();
   }
 
-  function fetchAllShops() {
-    let pending = SEARCH_POINTS.length;
-    document.getElementById("resultCount").textContent = "ラーメン店を検索中…";
-
-    SEARCH_POINTS.forEach(pt => {
-      const request = {
-        location: new google.maps.LatLng(pt.lat, pt.lng),
-        radius: pt.radius,
-        keyword: "ラーメン",
-        type: "restaurant"
-      };
-      const handlePage = (results, status, pagination) => {
-        if (status === google.maps.places.PlacesServiceStatus.OK && results) {
-          results.forEach(r => considerCandidate(r));
-          if (pagination && pagination.hasNextPage) {
-            // 次ページは少し待ってから取得（API仕様）
-            setTimeout(() => pagination.nextPage(), 1200);
-            return;
-          }
-        }
-        pending--;
-        renderAll();
-        if (pending <= 0 && !detailRunning) {
-          // 全拠点の検索完了 → 詳細取得キューを処理開始
-          processDetailQueue();
-        }
-      };
-      placesService.nearbySearch(request, handlePage);
-    });
-  }
-
-  // 店名だけで「確実にラーメン店」と断定できるワード（詳細取得を省略できる）
-  function nameLooksRamen(name) {
-    const ramenWords = ["ラーメン", "らーめん", "らぁめん", "ラー麺", "らぁ麺",
-                        "中華そば", "支那そば", "つけ麺", "つけめん", "麺屋", "麺処",
-                        "まぜそば", "油そば", "家系", "二郎"];
-    return ramenWords.some(w => (name || "").includes(w));
-  }
-
-  // nearbySearch の結果を、詳細取得して ramen_restaurant のみ採用する
-  function considerCandidate(r) {
-    if (!r.place_id || allShops[r.place_id] || pendingIds.has(r.place_id)) return;
-
-    // 店名で確実にラーメンと分かるものは詳細取得せず即採用（コスト節約）
-    if (nameLooksRamen(r.name)) {
-      addShop(r);
-      return;
-    }
-
-    // それ以外は詳細を取得して types を確認
-    pendingIds.add(r.place_id);
-    detailQueue.push(r.place_id);
-  }
-
-  // 詳細取得をレート制限しながら順番に処理
-  function processDetailQueue() {
-    if (detailQueue.length === 0) {
-      detailRunning = false;
-      renderAll();
-      return;
-    }
-    detailRunning = true;
-    const id = detailQueue.shift();
-    placesService.getDetails(
-      { placeId: id, fields: ["place_id", "name", "types", "rating", "user_ratings_total", "geometry", "vicinity", "formatted_address", "opening_hours"] },
-      (place, status) => {
-        if (status === google.maps.places.PlacesServiceStatus.OK && place) {
-          const types = place.types || [];
-          if (types.includes("ramen_restaurant")) {
-            // vicinity が無い場合があるので住所を補完
-            place.vicinity = place.vicinity || place.formatted_address || "";
-            addShop(place);
-            renderAll();
-          }
-        }
-        pendingIds.delete(id);
-        // 次を少し間隔をあけて処理（API負荷・QPS対策）
-        setTimeout(processDetailQueue, 220);
-      }
-    );
-  }
-
-  function addShop(r) {
-    if (!r.place_id || allShops[r.place_id]) return;
-    const nm = (r.name || "");
-    const shop = {
-      id: r.place_id,
-      name: nm,
-      rating: r.rating || 0,
-      reviews: r.user_ratings_total || 0,
-      lat: r.geometry.location.lat(),
-      lng: r.geometry.location.lng(),
-      address: r.vicinity || "",
-      area: areaOf(r.vicinity || ""),
-      open: r.opening_hours ? (r.opening_hours.open_now ? "営業中の可能性" : "時間外の可能性") : null
-    };
-    allShops[r.place_id] = shop;
-
-    const marker = new google.maps.Marker({
-      position: { lat: shop.lat, lng: shop.lng },
-      map: map,
-      title: shop.name,
-      icon: markerIcon(shop)
-    });
-    marker.addListener("click", () => openDetail(shop.id));
-    markers[shop.id] = marker;
-  }
-
-  function markerIcon(shop) {
+  function createMarker(shop) {
     const color = visited[shop.id] ? "#56a832"
                 : isHiddenGem(shop) ? "#f5b400"
                 : "#e8480c";
-    return {
-      path: google.maps.SymbolPath.CIRCLE,
-      fillColor: color,
-      fillOpacity: 1,
-      strokeColor: "#fff",
-      strokeWeight: 2,
-      scale: 8
-    };
+
+    // SVGを使ったカスタムマーカー
+    const svgIcon = L.divIcon({
+      className: 'custom-pin',
+      html: `<div style="background-color: ${color}; width: 16px; height: 16px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>`,
+      iconSize: [16, 16],
+      iconAnchor: [8, 8]
+    });
+
+    const marker = L.marker([shop.lat, shop.lng], { icon: svgIcon }).addTo(map);
+    marker.on('click', () => openDetail(shop.id));
+    markers[shop.id] = marker;
+  }
+
+  function updateMarkerStyles() {
+    Object.values(allShops).forEach(s => {
+      if (markers[s.id]) {
+        map.removeLayer(markers[s.id]);
+      }
+      createMarker(s);
+    });
   }
 
   function getFiltered() {
@@ -465,7 +318,7 @@
     const visitedHide = document.getElementById("visitedHide").checked;
 
     return Object.values(allShops).filter(s => {
-      if (q && !(s.name.toLowerCase().includes(q) || s.address.toLowerCase().includes(q))) return false;
+      if (q && !(s.name.toLowerCase().includes(q) || s.address.toLowerCase().includes(q) || s.comment.toLowerCase().includes(q))) return false;
       if (area && s.area !== area) return false;
       if (hiddenOnly && !isHiddenGem(s)) return false;
       if (visitedHide && visited[s.id]) return false;
@@ -475,9 +328,9 @@
 
   function renderAll() {
     const shops = getFiltered();
-    // リスト描画
     const list = document.getElementById("list");
     list.innerHTML = "";
+
     shops.forEach(s => {
       const div = document.createElement("div");
       div.className = "card" + (visited[s.id] ? " visited" : "");
@@ -497,14 +350,16 @@
       list.appendChild(div);
     });
 
-    document.getElementById("resultCount").textContent =
-      `${shops.length} 軒を表示中（県内検索結果）`;
+    document.getElementById("resultCount").textContent = `${shops.length} 軒を表示中`;
 
-    // マーカー表示/非表示
+    // マーカーの表示・非表示切り替え
     const visibleIds = new Set(shops.map(s => s.id));
     Object.entries(markers).forEach(([id, m]) => {
-      m.setMap(visibleIds.has(id) ? map : null);
-      m.setIcon(markerIcon(allShops[id]));
+      if (visibleIds.has(id)) {
+        if (!map.hasLayer(m)) m.addTo(map);
+      } else {
+        if (map.hasLayer(m)) map.remove(m);
+      }
     });
 
     updateCounter();
@@ -513,8 +368,7 @@
   function openDetail(id) {
     const s = allShops[id];
     if (!s) return;
-    map.panTo({ lat: s.lat, lng: s.lng });
-    if (map.getZoom() < 14) map.setZoom(15);
+    map.setView([s.lat, s.lng], 14);
 
     const done = !!visited[id];
     const gem = isHiddenGem(s) ? '<span class="badge hidden-gem">隠れた名店</span>' : "";
@@ -525,24 +379,25 @@
       </div>
       <div class="detail-row"><b>評価:</b> ${s.rating ? "★" + s.rating.toFixed(1) + ` （${s.reviews}件）` : "情報なし"}</div>
       <div class="detail-row"><b>住所:</b> ${escapeHtml(s.address) || "—"}</div>
-      ${s.open ? `<div class="detail-row"><b>状況:</b> ${s.open}</div>` : ""}
+      <div class="detail-row"><b>特徴:</b> ${escapeHtml(s.comment)}</div>
       <div>
         <button class="visit-btn ${done ? "done" : ""}" id="visitToggle">
           ${done ? "✓ 制覇済み" : "🍜 制覇した！"}
         </button>
         <a class="gmap-link" target="_blank" rel="noopener"
-           href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(s.name)}&query_place_id=${s.id}">
-           Googleマップで開く →
+            href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(s.name + " " + s.address)}">
+            Googleマップで場所を確認 →
         </a>
       </div>`;
     document.getElementById("detail").classList.remove("hidden");
 
-    document.getElementById("visitToggle").addEventListener("click", () => {
+    document.getElementById("visitToggle").onclick = () => {
       if (visited[id]) delete visited[id]; else visited[id] = true;
       saveVisited();
+      updateMarkerStyles();
       openDetail(id);
       renderAll();
-    });
+    };
   }
 
   function updateCounter() {
@@ -555,7 +410,7 @@
     }[c]));
   }
 
-  // イベント
+  // イベントリスナー
   document.getElementById("searchBox").addEventListener("input", renderAll);
   document.getElementById("areaFilter").addEventListener("change", renderAll);
   document.getElementById("hiddenOnly").addEventListener("change", renderAll);
@@ -570,23 +425,9 @@
     openDetail(pick.id);
   });
 
-  // Google Maps スクリプト読み込み
-  function loadGoogleMaps() {
-    if (!GOOGLE_MAPS_API_KEY || GOOGLE_MAPS_API_KEY === "YOUR_API_KEY_HERE") {
-      document.getElementById("apiNotice").classList.remove("hidden");
-      document.getElementById("resultCount").textContent = "APIキー未設定";
-      return;
-    }
-    const s = document.createElement("script");
-    s.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places&loading=async&callback=initMap`;
-    s.async = true;
-    s.defer = true;
-    s.onerror = () => {
-      document.getElementById("apiNotice").classList.remove("hidden");
-    };
-    window.initMap = initMap;
-    document.head.appendChild(s);
-  }
-
-  loadGoogleMaps();
+  // 初期化実行
+  window.addEventListener('DOMContentLoaded', initMap);
 </script>
+
+</body>
+</html>
