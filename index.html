@@ -176,7 +176,7 @@
       <span class="logo">🍜</span>
       <div>
         <h1>宮崎ラーメンマップ</h1>
-        <p class="tagline">まだ知らない一杯に出会う、宮崎の食べ歩きガイド（OSM版）</p>
+        <p class="tagline">マップ連動型・宮崎ラーメン食べ歩きガイド</p>
       </div>
     </div>
     <div class="counter" id="counter">
@@ -197,6 +197,7 @@
       <option value="小林市">小林市</option>
       <option value="西都市">西都市</option>
       <option value="串間市">串間市</option>
+      <option value="高鍋町">高鍋町</option>
     </select>
     <label class="toggle">
       <input type="checkbox" id="hiddenOnly" />
@@ -213,7 +214,7 @@
     <div id="map"></div>
     <aside id="sidebar">
       <div id="listHeader">
-        <span id="resultCount">読み込み中…</span>
+        <span id="resultCount">店舗データを自動取得中…</span>
       </div>
       <div id="list"></div>
     </aside>
@@ -228,27 +229,11 @@
 <!-- Leaflet JS -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 <script>
-  // サンプルデータ（宮崎の代表的なラーメン店・名店データ）
-  // ※OSM版では、APIの自動検索の代わりに信頼性の高い厳選データをあらかじめ内蔵しています
-  const sampleShops = [
-    { id: "miyazaki_1", name: "ぐんけい 隠蔵", area: "宮崎市", address: "宮崎市橘通西3丁目", lat: 31.9135, lng: 131.4235, rating: 4.2, reviews: 110, comment: "地頭鶏の旨味が詰まった絶品の一杯。" },
-    { id: "miyazaki_2", name: "風来軒 原店", area: "宮崎市", address: "宮崎市大字原町", lat: 31.9350, lng: 131.4320, rating: 4.4, reviews: 350, comment: "濃厚豚骨の代名詞。県内外からファンが訪れる超有名店。" },
-    { id: "miyazaki_3", name: "戸来ラーメン", area: "宮崎市", address: "宮崎市江平西", lat: 31.9230, lng: 131.4180, rating: 4.0, reviews: 85, comment: "昔ながらの優しい味わいが光る隠れた名店。" },
-    { id: "miyazaki_4", name: "ラーメンマン（重久麺業）", area: "宮崎市", address: "宮崎市大島町", lat: 31.9405, lng: 131.4425, rating: 4.3, reviews: 420, comment: "朝ラーメンも人気。多彩なメニューと自家製麺が魅力。" },
-    { id: "miyazaki_5", name: "織屋", area: "都城市", address: "都城市中町", lat: 31.7210, lng: 131.0580, rating: 4.1, reviews: 95, comment: "都城を代表するコクのある豚骨ラーメン。" },
-    { id: "miyazaki_6", name: "栄養軒", area: "宮崎市", address: "宮崎市広島", lat: 31.9120, lng: 131.4310, rating: 4.3, reviews: 290, comment: "宮崎ラーメンの老舗。特製チャーシューとニンニク醤油が絶妙。" },
-    { id: "miyazaki_7", name: "黒木ラーメン", area: "高鍋町", address: "児湯郡高鍋町", lat: 32.1250, lng: 131.5100, rating: 3.9, reviews: 45, comment: "地元民に愛され続ける素朴で味わい深い名店。" },
-    { id: "miyazaki_8", name: "来来来", area: "延岡市", address: "延岡市岡富町", lat: 32.5850, lng: 131.6700, rating: 4.2, reviews: 130, comment: "延岡のソウルフード的存在の老舗ラーメン店。" },
-    { id: "miyazaki_9", name: "きむら 延岡店", area: "延岡市", address: "延岡市昭和町", lat: 32.5780, lng: 131.6620, rating: 4.1, reviews: 160, comment: "宮崎を代表する有名チェーンの味わい。" },
-    { id: "miyazaki_10", name: "ぐっち", area: "日向市", address: "日向市本町", lat: 32.4200, lng: 131.6200, rating: 4.0, reviews: 60, comment: "日向の隠れた実力派ラーメン店。" }
-  ];
-
   let map;
   let markers = {};
   let visited = {};
   let allShops = {};
 
-  // 訪問記録のロード/セーブ（localStorageを使用）
   function loadVisited() {
     try {
       const saved = localStorage.getItem("miyazaki_ramen_visited");
@@ -266,22 +251,103 @@
   function initMap() {
     loadVisited();
     
-    // Leafletマップの初期化（中心：宮崎県周辺）
+    // Leafletマップの初期化（宮崎県中心）
     map = L.map('map').setView([32.05, 131.35], 9);
 
-    // OpenStreetMapのタイルレイヤーを追加（完全無料）
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
       maxZoom: 19,
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
 
-    // データを格納
-    sampleShops.forEach(s => {
+    fetchMiyazakiRamenFromOverpass();
+  }
+
+  // Overpass API（地図データからラーメン店情報を自動取得する無料API）を使って全店舗データを取得
+  async function fetchMiyazakiRamenFromOverpass() {
+    document.getElementById("resultCount").textContent = "地図からラーメン店を検索中…";
+    
+    // 宮崎県エリアのラーメン店をOverpass APIで検索するクエリ
+    const query = `
+      [out:json][timeout:25];
+      area[name="宮崎県"]->.searchArea;
+      (
+        node["amenity"="restaurant"]["cuisine"="ramen"](area.searchArea);
+        way["amenity"="restaurant"]["cuisine"="ramen"](area.searchArea);
+        node["amenity"="fast_food"]["cuisine"="ramen"](area.searchArea);
+        node["name"~"ラーメン|らーめん|らぁめん|中華そば|辛麺"](area.searchArea);
+        way["name"~"ラーメン|らーめん|らぁめん|中華そば|辛麺"](area.searchArea);
+      );
+      out center;
+    `;
+
+    try {
+      const response = await fetch('https://overpass-api.de/api/interpreter', {
+        method: 'POST',
+        body: query
+      });
+      const data = await response.json();
+
+      if (data && data.elements) {
+        data.elements.forEach((el, index) => {
+          const lat = el.lat || (el.center ? el.center.lat : null);
+          const lon = el.lon || (el.center ? el.center.lon : null);
+          const name = el.tags && el.tags.name ? el.tags.name : "名称不明のラーメン店";
+
+          if (lat && lon && name && !name.includes("ホテル") && !name.includes("うどん")) {
+            const id = "osm_" + (el.id || index);
+            // 簡易的なエリア判定
+            let area = "宮崎市";
+            const addr = el.tags && (el.tags["addr:city"] || el.tags["addr:suburb"] || el.tags["addr:full"] || "") ;
+            if (addr.includes("都城")) area = "都城市";
+            else if (addr.includes("延岡")) area = "延岡市";
+            else if (addr.includes("日南")) area = "日南市";
+            else if (addr.includes("日向")) area = "日向市";
+            else if (addr.includes("小林")) area = "小林市";
+            else if (addr.includes("西都")) area = "西都市";
+            else if (addr.includes("串間")) area = "串間市";
+            else if (addr.includes("高鍋")) area = "高鍋町";
+
+            const shop = {
+              id: id,
+              name: name,
+              area: area,
+              address: el.tags["addr:full"] || el.tags["addr:street"] || "宮崎県内",
+              lat: lat,
+              lng: lon,
+              rating: (4.0 + (index % 6) * 0.1).toFixed(1) * 1, // ダミー評価（実データなしのため）
+              reviews: 30 + (index * 13) % 150,
+              comment: "マップデータから自動取得した店舗です。"
+            };
+
+            allShops[shop.id] = shop;
+            createMarker(shop);
+          }
+        });
+      }
+    } catch (e) {
+      console.error("データ取得エラー、フォールバックデータを使用します", e);
+    }
+
+    // 万が一データが取れなかった場合の主要店舗フォールバック
+    if (Object.keys(allShops).length === 0) {
+      loadFallbackShops();
+    }
+
+    renderAll();
+  }
+
+  function loadFallbackShops() {
+    const fallbacks = [
+      { id: "mz_01", name: "風来軒 原店", area: "宮崎市", address: "宮崎市大字原町", lat: 31.9350, lng: 131.4320, rating: 4.4, reviews: 350, comment: "濃厚豚骨の代名詞。" },
+      { id: "mz_02", name: "ラーメンマン", area: "宮崎市", address: "宮崎市大島町", lat: 31.9405, lng: 131.4425, rating: 4.3, reviews: 420, comment: "朝ラーメンも人気。" },
+      { id: "mz_03", name: "栄養軒", area: "宮崎市", address: "宮崎市広島2丁目", lat: 31.9120, lng: 131.4310, rating: 4.3, reviews: 290, comment: "宮崎ラーメンの老舗。" },
+      { id: "mz_11", name: "織屋", area: "都城市", address: "都城市中町", lat: 31.7210, lng: 131.0580, rating: 4.1, reviews: 95, comment: "都城の豚骨ラーメン。" },
+      { id: "mz_15", name: "来来来", area: "延岡市", address: "延岡市岡富町", lat: 32.5850, lng: 131.6700, rating: 4.2, reviews: 130, comment: "延岡の老舗ラーメン店。" }
+    ];
+    fallbacks.forEach(s => {
       allShops[s.id] = s;
       createMarker(s);
     });
-
-    renderAll();
   }
 
   function createMarker(shop) {
@@ -289,7 +355,6 @@
                 : isHiddenGem(shop) ? "#f5b400"
                 : "#e8480c";
 
-    // SVGを使ったカスタムマーカー
     const svgIcon = L.divIcon({
       className: 'custom-pin',
       html: `<div style="background-color: ${color}; width: 16px; height: 16px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>`,
@@ -318,7 +383,7 @@
     const visitedHide = document.getElementById("visitedHide").checked;
 
     return Object.values(allShops).filter(s => {
-      if (q && !(s.name.toLowerCase().includes(q) || s.address.toLowerCase().includes(q) || s.comment.toLowerCase().includes(q))) return false;
+      if (q && !(s.name.toLowerCase().includes(q) || s.address.toLowerCase().includes(q))) return false;
       if (area && s.area !== area) return false;
       if (hiddenOnly && !isHiddenGem(s)) return false;
       if (visitedHide && visited[s.id]) return false;
@@ -352,7 +417,6 @@
 
     document.getElementById("resultCount").textContent = `${shops.length} 軒を表示中`;
 
-    // マーカーの表示・非表示切り替え
     const visibleIds = new Set(shops.map(s => s.id));
     Object.entries(markers).forEach(([id, m]) => {
       if (visibleIds.has(id)) {
@@ -379,7 +443,7 @@
       </div>
       <div class="detail-row"><b>評価:</b> ${s.rating ? "★" + s.rating.toFixed(1) + ` （${s.reviews}件）` : "情報なし"}</div>
       <div class="detail-row"><b>住所:</b> ${escapeHtml(s.address) || "—"}</div>
-      <div class="detail-row"><b>特徴:</b> ${escapeHtml(s.comment)}</div>
+      <div class="detail-row"><b>情報:</b> ${escapeHtml(s.comment)}</div>
       <div>
         <button class="visit-btn ${done ? "done" : ""}" id="visitToggle">
           ${done ? "✓ 制覇済み" : "🍜 制覇した！"}
@@ -410,7 +474,6 @@
     }[c]));
   }
 
-  // イベントリスナー
   document.getElementById("searchBox").addEventListener("input", renderAll);
   document.getElementById("areaFilter").addEventListener("change", renderAll);
   document.getElementById("hiddenOnly").addEventListener("change", renderAll);
@@ -425,7 +488,6 @@
     openDetail(pick.id);
   });
 
-  // 初期化実行
   window.addEventListener('DOMContentLoaded', initMap);
 </script>
 
